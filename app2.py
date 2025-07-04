@@ -29,13 +29,15 @@ def mostrar_info_compra(row, comercio, archivo_img, ruta_local_img):
                     imagen = imagen.rotate(90, expand=True)
         except Exception as e:
             pass  # Si la imagen no tiene EXIF, no se rota
-        # Ajustar tamaño para mejor lectura
+        # Ajustar tamaño para mejor lectura y forzar verticalidad
         width, height = imagen.size
+        if width > height:
+            imagen = imagen.rotate(90, expand=True)
         max_width = 700
-        if width > max_width:
-            new_height = int(max_width * height / width)
+        if imagen.size[0] > max_width:
+            new_height = int(max_width * imagen.size[1] / imagen.size[0])
             imagen = imagen.resize((max_width, new_height))
-        st.image(imagen, caption="Boleta", use_column_width=True)
+        st.image(imagen, caption="Boleta", use_container_width=True)
         
 # Función descargar_y_mostrar_imagen
 import tempfile
@@ -183,8 +185,10 @@ df_pic = leer_tabla("PICTURETABLE")
 nombre_producto = st.text_input("Escribe el nombre del producto que quieres buscar:")
 
 if nombre_producto:
-    df_trans['fuzzy_score'] = df_trans['notes'].astype(str).apply(lambda x: fuzz.partial_ratio(nombre_producto.lower(), x.lower()))
-    df_filtrado = df_trans[df_trans['fuzzy_score'] > 70].sort_values("date", ascending=False)
+    df_filtrado = df_trans[df_trans['fuzzy_score'] > 70]
+    df_filtrado = df_filtrado.sort_values("date", ascending=False)
+    df_filtrado['date'] = pd.to_datetime(df_filtrado['date'], errors='coerce')
+    df_filtrado = df_filtrado.sort_values("date", ascending=False)
     top3 = df_filtrado.head(3)
 
     if top3.empty:
