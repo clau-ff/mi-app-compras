@@ -1,3 +1,42 @@
+# Función mostrar información de compra e imagen legible
+
+from PIL import Image, ExifTags
+
+def mostrar_info_compra(row, comercio, archivo_img, ruta_local_img):
+    st.markdown(f"- **Fecha:** {row['date']}")
+    st.markdown(f"  - **Nota:** {row['notes']}")
+    if comercio:
+        st.markdown(f"  - **Lugar/Comercio:** {comercio}")
+    if archivo_img:
+        st.markdown(f"  - **Nombre archivo imagen:** {archivo_img}")
+
+    # Mostrar imagen con rotación automática si es necesario y en buena resolución
+    if ruta_local_img:
+        imagen = Image.open(ruta_local_img)
+        # Intentar rotar según EXIF (muy útil para fotos de móvil)
+        try:
+            for orientation in ExifTags.TAGS.keys():
+                if ExifTags.TAGS[orientation] == 'Orientation':
+                    break
+            exif = imagen._getexif()
+            if exif is not None:
+                orientation_value = exif.get(orientation, None)
+                if orientation_value == 3:
+                    imagen = imagen.rotate(180, expand=True)
+                elif orientation_value == 6:
+                    imagen = imagen.rotate(270, expand=True)
+                elif orientation_value == 8:
+                    imagen = imagen.rotate(90, expand=True)
+        except Exception as e:
+            pass  # Si la imagen no tiene EXIF, no se rota
+        # Ajustar tamaño para mejor lectura
+        width, height = imagen.size
+        max_width = 700
+        if width > max_width:
+            new_height = int(max_width * height / width)
+            imagen = imagen.resize((max_width, new_height))
+        st.image(imagen, caption="Boleta", use_column_width=True)
+        
 # Función descargar_y_mostrar_imagen
 import tempfile
 from PIL import Image
@@ -152,23 +191,34 @@ if nombre_producto:
         st.warning("No se encontraron compras similares.")
     else:
         st.subheader("Últimas 3 compras encontradas:")
-        for idx, row in top3.iterrows():
-            # Buscar imagen en PICTURETABLE
-            pic = df_pic[df_pic['transactionID'] == row['transactionsTableID']]
-            if not pic.empty:
-                archivo_img = pic.iloc[0]['pictureFileName']
-                ruta_local = descargar_y_mostrar_imagen(drive_service, archivo_img, pictures_id)
-                st.image(ruta_local, caption="Boleta", width=350)
-        
-            # Formulario para registrar precio y cantidad
-            with st.form(f"form_{row['transactionsTableID']}"):
-                precio = st.number_input("Precio pagado", min_value=0.0, format="%.2f", key=f"precio_{row['transactionsTableID']}")
-                cantidad = st.number_input("Cantidad comprada", min_value=1, step=1, key=f"cantidad_{row['transactionsTableID']}")
-                submit = st.form_submit_button("Registrar en Google Sheets")
-            if submit:
-                st.success("¡Compra registrada! (esto después se enviará a Google Sheets)")
-            
-            st.markdown("---")
+    for idx, row in top3.iterrows():
+        # Buscar comercio
+        comercio = None
+        if 'itemID' in row and not pd.isnull(row['itemID']):
+            item_row = df_item[df_item['itemTableID'] == row['itemID']]
+            if not item_row.empty:
+                comercio = item_row.iloc[0]['itemName']
 
+    # Buscar imagen
+    archivo_img = None
+    ruta_local = None
+    pic = df_pic[df_pic['transactionID'] == row['transactionsTableID']]
+    if not pic.empty:
+        archivo_img = pic.iloc[0]['pictureFileName']
+        ruta_local = descargar_y_mostrar_imagen(drive_service, archivo_img, pictures_id)
+
+    # Mostrar datos siempre, imagen sólo si hay archivo
+    mostrar_info_compra(row, comercio, archivo_img, ruta_local)
+
+    # Mostrar formulario solo si hay imagen
+    if ruta_local:
+        with st.form(f"form_{row['transactionsTableID']}"):
+            precio = st.number_input("Precio pagado", min_value=0.0, format="%.2f", key=f"precio_{row['transactionsTableID']}")
+            cantidad = st.number_input("Cantidad comprada", min_value=1, step=1, key=f"cantidad_{row['transactionsTableID']}")
+            submit = st.form_submit_button("Registrar en Google Sheets")
+        if submit:
+            st.success("¡Compra registrada! (esto después se enviará a Google Sheets)")
+
+    st.markdown("---")
 else:
     st.info("Por favor, ingresa el nombre del producto a buscar.")
