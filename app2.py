@@ -11,6 +11,13 @@ if password_input != PASSWORD:
 
 st.success("¡Bienvenida/o!")
 
+import os
+
+# 1.1 Crear archivo client_secrets.json temporalmente si no existe
+if not os.path.exists("client_secrets.json"):
+    with open("client_secrets.json", "w") as f:
+        f.write(st.secrets["CLIENT_SECRETS"])
+
 # 2. AUTORIZACIÓN GOOGLE DRIVE Y SHEETS (próximo paso)
 st.info("Haz clic para autorizar acceso temporal a Google Drive y Sheets. Esto es seguro y privado para tu familia.")
 
