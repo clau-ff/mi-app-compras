@@ -1,3 +1,27 @@
+# Función descargar_y_mostrar_imagen
+import tempfile
+from PIL import Image
+
+def descargar_y_mostrar_imagen(drive_service, file_name, carpeta_id):
+    # Busca el archivo por nombre dentro de la carpeta de fotos
+    q = f"'{carpeta_id}' in parents and trashed = false and name = '{file_name}'"
+    results = drive_service.files().list(q=q, fields="files(id, name)").execute()
+    files = results.get('files', [])
+    if not files:
+        return None
+    file_id = files[0]['id']
+    request = drive_service.files().get_media(fileId=file_id)
+    tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix="." + file_name.split(".")[-1])
+    fh = open(tmp_file.name, "wb")
+    from googleapiclient.http import MediaIoBaseDownload
+    downloader = MediaIoBaseDownload(fh, request)
+    done = False
+    while not done:
+        status, done = downloader.next_chunk()
+    fh.close()
+    # Retorna la ruta local del archivo
+    return tmp_file.name
+
 import streamlit as st
 
 # 1. LOGIN SIMPLE
@@ -57,6 +81,13 @@ bluecoins_id = buscar_carpeta('Bluecoins')
 if not bluecoins_id:
     st.error("No se encontró la carpeta 'Bluecoins'.")
     st.stop()
+
+# Buscar la carpeta 'Pictures'
+pictures_id = buscar_carpeta('Pictures', parent_id=bluecoins_id)
+if not pictures_id:
+    st.error("No se encontró la carpeta 'Pictures' dentro de 'Bluecoins'.")
+    st.stop()
+
 # Buscar la subcarpeta 'QuickSync'
 quicksync_id = buscar_carpeta('QuickSync', parent_id=bluecoins_id)
 if not quicksync_id:
@@ -122,21 +153,22 @@ if nombre_producto:
     else:
         st.subheader("Últimas 3 compras encontradas:")
         for idx, row in top3.iterrows():
-            st.markdown(f"- **Fecha:** {row['date']}")
-            st.markdown(f"  - **Nota:** {row['notes']}")
-            # Buscar nombre de comercio
-            comercio = None
-            if 'itemID' in row and not pd.isnull(row['itemID']):
-                item_row = df_item[df_item['itemTableID'] == row['itemID']]
-                if not item_row.empty:
-                    comercio = item_row.iloc[0]['itemName']
-            if comercio:
-                st.markdown(f"  - **Lugar/Comercio:** {comercio}")
-            # Buscar imagen
+            # Buscar imagen en PICTURETABLE
             pic = df_pic[df_pic['transactionID'] == row['transactionsTableID']]
             if not pic.empty:
                 archivo_img = pic.iloc[0]['pictureFileName']
-                st.markdown(f"  - Archivo imagen: {archivo_img}")
+                ruta_local = descargar_y_mostrar_imagen(drive_service, archivo_img, pictures_id)
+                st.image(ruta_local, caption="Boleta", width=350)
+        
+            # Formulario para registrar precio y cantidad
+            with st.form(f"form_{row['transactionsTableID']}"):
+                precio = st.number_input("Precio pagado", min_value=0.0, format="%.2f", key=f"precio_{row['transactionsTableID']}")
+                cantidad = st.number_input("Cantidad comprada", min_value=1, step=1, key=f"cantidad_{row['transactionsTableID']}")
+                submit = st.form_submit_button("Registrar en Google Sheets")
+            if submit:
+                st.success("¡Compra registrada! (esto después se enviará a Google Sheets)")
+            
             st.markdown("---")
+
 else:
     st.info("Por favor, ingresa el nombre del producto a buscar.")
