@@ -31,7 +31,7 @@ st.subheader("Autoriza acceso a tu Google Drive")
 if "drive_auth_ok" not in st.session_state:
     gauth = GoogleAuth()
     gauth.DEFAULT_SETTINGS['client_config_file'] = "client_secrets.json"
-    gauth.LocalWebserverAuth()  # Esto abrirá la ventana para autorizar
+    gauth.CommandLineAuth()  # AUTORIZACIÓN POR LINK Y CÓDIGO (funciona en Streamlit Cloud)
     st.session_state["gauth"] = gauth
     st.session_state["drive_auth_ok"] = True
     st.success("¡Acceso a Google Drive autorizado!")
