@@ -11,72 +11,82 @@ if password_input != PASSWORD:
 
 st.success("¡Bienvenida/o!")
 
-import os
+import json
+import gspread
+from google.oauth2.service_account import Credentials
+from googleapiclient.discovery import build
 
-# 1.1 Crear archivo client_secrets.json temporalmente si no existe
-if not os.path.exists("client_secrets.json"):
-    with open("client_secrets.json", "w") as f:
-        f.write(st.secrets["CLIENT_SECRETS"])
-
-# 2. AUTORIZACIÓN GOOGLE DRIVE Y SHEETS (próximo paso)
-st.info("Haz clic para autorizar acceso temporal a Google Drive y Sheets. Esto es seguro y privado para tu familia.")
-
-from pydrive2.auth import GoogleAuth
-from pydrive2.drive import GoogleDrive
-from datetime import datetime
-
-# ---- AUTENTICACIÓN GOOGLE DRIVE ----
-st.subheader("Autoriza acceso a tu Google Drive")
-
-if "drive_auth_ok" not in st.session_state:
-    gauth = GoogleAuth()
-    gauth.DEFAULT_SETTINGS['client_config_file'] = "client_secrets.json"
-    gauth.CommandLineAuth()  # AUTORIZACIÓN POR LINK Y CÓDIGO (funciona en Streamlit Cloud)
-    st.session_state["gauth"] = gauth
-    st.session_state["drive_auth_ok"] = True
-    st.success("¡Acceso a Google Drive autorizado!")
-else:
-    gauth = st.session_state["gauth"]
-
-drive = GoogleDrive(gauth)
-
-# ---- BUSCAR ARCHIVO BLUECOINS MÁS RECIENTE EN LA CARPETA ----
-# Asume que tu carpeta destino es: MyDrive/Bluecoins/QuickSync/
-st.info("Buscando archivo Bluecoins más reciente en /Bluecoins/QuickSync/…")
-
-# 1. Buscar la carpeta 'Bluecoins'
-bluecoins_folders = drive.ListFile({
-    'q': "title='Bluecoins' and mimeType='application/vnd.google-apps.folder' and trashed=false"
-}).GetList()
-if not bluecoins_folders:
-    st.error("No se encontró la carpeta 'Bluecoins' en tu Drive.")
+# ----- Crear archivo temporal con credenciales -----
+if not "SERVICE_ACCOUNT_JSON" in st.secrets:
+    st.error("No se encontró SERVICE_ACCOUNT_JSON en tus Secrets.")
     st.stop()
-bluecoins_folder_id = bluecoins_folders[0]['id']
 
-# 2. Buscar la subcarpeta 'QuickSync'
-quicksync_folders = drive.ListFile({
-    'q': f"'{bluecoins_folder_id}' in parents and title='QuickSync' and mimeType='application/vnd.google-apps.folder' and trashed=false"
-}).GetList()
-if not quicksync_folders:
+SERVICE_ACCOUNT_FILE = "service_account.json"
+if not st.session_state.get("service_account_file_created", False):
+    with open(SERVICE_ACCOUNT_FILE, "w") as f:
+        f.write(st.secrets["SERVICE_ACCOUNT_JSON"])
+    st.session_state["service_account_file_created"] = True
+
+# ----- Definir SCOPES -----
+SCOPES = [
+    "https://www.googleapis.com/auth/drive",
+    "https://www.googleapis.com/auth/spreadsheets"
+]
+
+# ----- Autenticar -----
+credentials = Credentials.from_service_account_file(
+    SERVICE_ACCOUNT_FILE,
+    scopes=SCOPES
+)
+
+drive_service = build("drive", "v3", credentials=credentials)
+
+# ----- Buscar carpeta 'Bluecoins/QuickSync' -----
+def buscar_carpeta(nombre, parent_id=None):
+    q = f"name = '{nombre}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
+    if parent_id:
+        q += f" and '{parent_id}' in parents"
+    results = drive_service.files().list(q=q, fields="files(id, name)").execute()
+    files = results.get('files', [])
+    if not files:
+        return None
+    return files[0]['id']
+
+# Buscar la carpeta 'Bluecoins'
+bluecoins_id = buscar_carpeta('Bluecoins')
+if not bluecoins_id:
+    st.error("No se encontró la carpeta 'Bluecoins'.")
+    st.stop()
+# Buscar la subcarpeta 'QuickSync'
+quicksync_id = buscar_carpeta('QuickSync', parent_id=bluecoins_id)
+if not quicksync_id:
     st.error("No se encontró la carpeta 'QuickSync' dentro de 'Bluecoins'.")
     st.stop()
-quicksync_folder_id = quicksync_folders[0]['id']
 
-# 3. Buscar los archivos .fydb dentro de esa carpeta
-fydb_files = drive.ListFile({
-    'q': f"'{quicksync_folder_id}' in parents and trashed=false and title contains '.fydb'"
-}).GetList()
+# ----- Buscar archivos .fydb en QuickSync -----
+q = f"'{quicksync_id}' in parents and trashed = false and name contains '.fydb'"
+results = drive_service.files().list(q=q, fields="files(id, name, modifiedTime)").execute()
+fydb_files = results.get('files', [])
 if not fydb_files:
     st.error("No se encontraron archivos .fydb en la carpeta QuickSync.")
     st.stop()
 
-# 4. Buscar el más reciente por fecha de modificación
-latest_file = max(fydb_files, key=lambda x: x['modifiedDate'])
+# ----- Encontrar el más reciente -----
+fydb_files.sort(key=lambda x: x['modifiedTime'], reverse=True)
+latest_file = fydb_files[0]
+st.success(f"Archivo Bluecoins más reciente: {latest_file['name']} (modificado: {latest_file['modifiedTime']})")
 
-# 5. Descargar el archivo
-dest_filename = "bluecoins.fydb"
-latest_file.GetContentFile(dest_filename)
-st.success(f"Archivo Bluecoins descargado: {latest_file['title']} (última modificación: {latest_file['modifiedDate']})")
+# ----- Descargar el archivo a la app -----
+request = drive_service.files().get_media(fileId=latest_file['id'])
+import io
+from googleapiclient.http import MediaIoBaseDownload
+fh = io.FileIO("bluecoins.fydb", "wb")
+downloader = MediaIoBaseDownload(fh, request)
+done = False
+while done is False:
+    status, done = downloader.next_chunk()
+fh.close()
+st.info(f"Archivo descargado como bluecoins.fydb en la app.")
 
 st.header("Buscar producto en historial de compras")
 
