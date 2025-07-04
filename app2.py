@@ -21,9 +21,63 @@ if not os.path.exists("client_secrets.json"):
 # 2. AUTORIZACIÓN GOOGLE DRIVE Y SHEETS (próximo paso)
 st.info("Haz clic para autorizar acceso temporal a Google Drive y Sheets. Esto es seguro y privado para tu familia.")
 
-# Aquí se implementará el flujo de autorización con pydrive2/gspread
+from pydrive2.auth import GoogleAuth
+from pydrive2.drive import GoogleDrive
+from datetime import datetime
 
-# 3. LEER ARCHIVO BLUECOINS MÁS RECIENTE (sección a completar)
+# ---- AUTENTICACIÓN GOOGLE DRIVE ----
+st.subheader("Autoriza acceso a tu Google Drive")
+
+if "drive_auth_ok" not in st.session_state:
+    gauth = GoogleAuth()
+    gauth.DEFAULT_SETTINGS['client_config_file'] = "client_secrets.json"
+    gauth.LocalWebserverAuth()  # Esto abrirá la ventana para autorizar
+    st.session_state["gauth"] = gauth
+    st.session_state["drive_auth_ok"] = True
+    st.success("¡Acceso a Google Drive autorizado!")
+else:
+    gauth = st.session_state["gauth"]
+
+drive = GoogleDrive(gauth)
+
+# ---- BUSCAR ARCHIVO BLUECOINS MÁS RECIENTE EN LA CARPETA ----
+# Asume que tu carpeta destino es: MyDrive/Bluecoins/QuickSync/
+st.info("Buscando archivo Bluecoins más reciente en /Bluecoins/QuickSync/…")
+
+# 1. Buscar la carpeta 'Bluecoins'
+bluecoins_folders = drive.ListFile({
+    'q': "title='Bluecoins' and mimeType='application/vnd.google-apps.folder' and trashed=false"
+}).GetList()
+if not bluecoins_folders:
+    st.error("No se encontró la carpeta 'Bluecoins' en tu Drive.")
+    st.stop()
+bluecoins_folder_id = bluecoins_folders[0]['id']
+
+# 2. Buscar la subcarpeta 'QuickSync'
+quicksync_folders = drive.ListFile({
+    'q': f"'{bluecoins_folder_id}' in parents and title='QuickSync' and mimeType='application/vnd.google-apps.folder' and trashed=false"
+}).GetList()
+if not quicksync_folders:
+    st.error("No se encontró la carpeta 'QuickSync' dentro de 'Bluecoins'.")
+    st.stop()
+quicksync_folder_id = quicksync_folders[0]['id']
+
+# 3. Buscar los archivos .fydb dentro de esa carpeta
+fydb_files = drive.ListFile({
+    'q': f"'{quicksync_folder_id}' in parents and trashed=false and title contains '.fydb'"
+}).GetList()
+if not fydb_files:
+    st.error("No se encontraron archivos .fydb en la carpeta QuickSync.")
+    st.stop()
+
+# 4. Buscar el más reciente por fecha de modificación
+latest_file = max(fydb_files, key=lambda x: x['modifiedDate'])
+
+# 5. Descargar el archivo
+dest_filename = "bluecoins.fydb"
+latest_file.GetContentFile(dest_filename)
+st.success(f"Archivo Bluecoins descargado: {latest_file['title']} (última modificación: {latest_file['modifiedDate']})")
+
 st.header("Buscar producto en historial de compras")
 
 # 4. BUSCAR PRODUCTO
