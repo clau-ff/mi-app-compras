@@ -93,6 +93,55 @@ st.header("Buscar producto en historial de compras")
 # 4. BUSCAR PRODUCTO
 nombre_producto = st.text_input("Escribe el nombre del producto que quieres buscar:")
 
+import sqlite3
+import pandas as pd
+from fuzzywuzzy import fuzz
+
+DB_FILENAME = "bluecoins.fydb"
+
+@st.cache_data
+def leer_tabla(nombre_tabla):
+    with sqlite3.connect(DB_FILENAME) as conn:
+        df = pd.read_sql_query(f"SELECT * FROM {nombre_tabla}", conn)
+    return df
+
+# Lee las tablas principales
+df_trans = leer_tabla("TRANSACTIONSTABLE")
+df_item = leer_tabla("ITEMTABLE")
+df_pic = leer_tabla("PICTURETABLE")
+
+# Búsqueda flexible
+nombre_producto = st.text_input("Escribe el nombre del producto que quieres buscar:")
+
+if nombre_producto:
+    df_trans['fuzzy_score'] = df_trans['notes'].astype(str).apply(lambda x: fuzz.partial_ratio(nombre_producto.lower(), x.lower()))
+    df_filtrado = df_trans[df_trans['fuzzy_score'] > 70].sort_values("date", ascending=False)
+    top3 = df_filtrado.head(3)
+
+    if top3.empty:
+        st.warning("No se encontraron compras similares.")
+    else:
+        st.subheader("Últimas 3 compras encontradas:")
+        for idx, row in top3.iterrows():
+            st.markdown(f"- **Fecha:** {row['date']}")
+            st.markdown(f"  - **Nota:** {row['notes']}")
+            # Buscar nombre de comercio
+            comercio = None
+            if 'itemID' in row and not pd.isnull(row['itemID']):
+                item_row = df_item[df_item['itemTableID'] == row['itemID']]
+                if not item_row.empty:
+                    comercio = item_row.iloc[0]['itemName']
+            if comercio:
+                st.markdown(f"  - **Lugar/Comercio:** {comercio}")
+            # Buscar imagen
+            pic = df_pic[df_pic['transactionID'] == row['transactionsTableID']]
+            if not pic.empty:
+                archivo_img = pic.iloc[0]['pictureFileName']
+                st.markdown(f"  - Archivo imagen: {archivo_img}")
+            st.markdown("---")
+else:
+    st.info("Por favor, ingresa el nombre del producto a buscar.")
+
 # Cuando la usuaria escriba el nombre y presione Enter, se ejecuta la búsqueda flexible (fuzzy matching) sobre 'notes'
 if nombre_producto:
     st.write(f"Buscando compras de: {nombre_producto} (coincidencia flexible)...")
