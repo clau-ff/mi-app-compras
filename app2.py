@@ -91,7 +91,6 @@ st.info(f"Archivo descargado como bluecoins.fydb en la app.")
 st.header("Buscar producto en historial de compras")
 
 # 4. BUSCAR PRODUCTO
-nombre_producto = st.text_input("Escribe el nombre del producto que quieres buscar:")
 
 import sqlite3
 import pandas as pd
