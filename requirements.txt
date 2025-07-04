@@ -1,0 +1,7 @@
+streamlit
+pandas
+fuzzywuzzy
+python-Levenshtein
+pydrive2
+gspread
+oauth2client
