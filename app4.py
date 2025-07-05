@@ -234,6 +234,7 @@ if nombre_producto:
                         st.info("Ya existe un registro para esta transacción en Sheets, no se duplicó.")
                         
             # --- ANÁLISIS DE PRECIOS HISTÓRICOS ---
+            precios_hist = []
             try:
                 precios_hist = [float(f['Precio']) for f in filas 
                     if 'Producto buscado' in f and f['Producto buscado'].strip().lower() == nombre_producto.strip().lower()
