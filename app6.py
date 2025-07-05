@@ -123,7 +123,7 @@ if nombre_producto:
     gc = gspread.authorize(credentials)
     worksheet = gc.open_by_key(SHEETS_ID).sheet1  # usa la hoja 1
     filas = worksheet.get_all_records()
-    ids_existentes = worksheet.col_values(1)
+    ids_existentes = worksheet.col_values(2)
     top = top.sort_values("date", ascending=False)
     
     def descargar_y_mostrar_imagen(drive_service, file_name, carpeta_id):
