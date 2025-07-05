@@ -215,7 +215,7 @@ if nombre_producto:
             else:
                 st.info("No hay archivo de boleta disponible.")
 
-                # Formulario SOLO si hay imagen
+            # Formulario SOLO si hay imagen
             if mostrar_formulario:
                 with st.form(f"form_{row['transactionsTableID']}"):
                     precio = st.number_input("Precio pagado", min_value=0.0, format="%.2f", key=f"precio_{row['transactionsTableID']}")
@@ -236,6 +236,26 @@ if nombre_producto:
                         st.success("¡Compra guardada en Google Sheets!")
                     else:
                         st.info("Ya existe un registro para esta transacción en Sheets, no se duplicó.")
+                # --- ANÁLISIS DE PRECIOS HISTÓRICOS ---
+                try:
+                    filas = worksheet.get_all_records()
+                    precios_hist = [float(f['Precio']) for f in filas if f['Nota'].strip().lower() == row['notes'].strip().lower() and f['Precio'] not in ('', None)]
+                    if precios_hist:
+                        st.subheader("Análisis de precios históricos:")
+                        st.write(f"- Precio mínimo: {min(precios_hist):.2f}")
+                        st.write(f"- Precio promedio: {sum(precios_hist)/len(precios_hist):.2f}")
+                    else:
+                        st.info("No hay historial suficiente para analizar precios aún.")
+                except Exception as ex:
+                    st.info("No hay historial suficiente para analizar precios aún.")
+
+                # --- SUGERENCIA DE CANTIDAD ---
+                if 'precio' in locals() and precios_hist:
+                    if float(precio) == min(precios_hist):
+                        sugerido = cantidad * 2 if cantidad > 0 else 1
+                        st.success(f"¡El precio actual es el más bajo! Se recomienda comprar {sugerido} unidades.")
+                    else:
+                        st.info("El precio no es el más bajo. Compra la cantidad habitual.")
             st.markdown("---")
 else:
     st.info("Por favor, ingresa el nombre del producto a buscar.")
