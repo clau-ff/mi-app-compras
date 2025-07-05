@@ -122,8 +122,6 @@ if nombre_producto:
     worksheet = gc.open_by_key(SHEETS_ID).sheet1  # usa la hoja 1
 
     for idx, row in top3.iterrows():
-        # ... (tus búsquedas de comercio, archivo_img y ruta_local) ...
-        # ----- Buscar comercio -----
         comercio = None
         archivo_img = None
         ruta_local = None
@@ -131,7 +129,14 @@ if nombre_producto:
             item_row = df_item[df_item['itemTableID'] == row['itemID']]
             if not item_row.empty:
                 comercio = item_row.iloc[0]['itemName']
-                
+
+        # BUSCAR imagen AHORA
+        pic = df_pic[df_pic['transactionID'] == row['transactionsTableID']]
+        if not pic.empty:
+            archivo_img = pic.iloc[0]['pictureFileName']
+            ruta_local = descargar_y_mostrar_imagen(drive_service, archivo_img, pictures_id)
+
+        # Mostrar datos
         st.markdown(f"- **Fecha:** {row['date'].strftime('%Y-%m-%d') if not pd.isnull(row['date']) else row['date']}")
         st.markdown(f"  - **Nota:** {row['notes']}")
         if comercio:
