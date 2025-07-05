@@ -125,6 +125,8 @@ if nombre_producto:
         # ... (tus búsquedas de comercio, archivo_img y ruta_local) ...
         # ----- Buscar comercio -----
         comercio = None
+        archivo_img = None
+        ruta_local = None
         if 'itemID' in row and not pd.isnull(row['itemID']):
             item_row = df_item[df_item['itemTableID'] == row['itemID']]
             if not item_row.empty:
