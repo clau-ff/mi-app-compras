@@ -84,6 +84,14 @@ def leer_tabla(nombre_tabla):
     return df
 
 df_trans = leer_tabla("TRANSACTIONSTABLE")
+from datetime import datetime
+
+# Convierte a datetime el campo 'date'
+df_trans['date'] = pd.to_datetime(df_trans['date'], errors='coerce')
+# Filtra solo hasta hoy
+hoy = pd.Timestamp(datetime.now().date())
+df_trans = df_trans[df_trans['date'] <= hoy]
+
 df_item = leer_tabla("ITEMTABLE")
 df_pic = leer_tabla("PICTURETABLE")
 
