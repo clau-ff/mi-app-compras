@@ -205,7 +205,7 @@ if nombre_producto:
 
         if mostrar_formulario:
             with st.form(f"form_{row['transactionsTableID']}"):
-                precio = st.number_input("Precio pagado", min_value=0.0, format="%.2f", key=f"precio_{row['transactionsTableID']}")
+                precio = st.number_input("Precio pagado", min_value=0, format="%d", key=f"precio_{row['transactionsTableID']}")
                 cantidad = st.number_input("Cantidad comprada", min_value=1, step=1, key=f"cantidad_{row['transactionsTableID']}")
                 submit = st.form_submit_button("Registrar en Google Sheets")
             if submit:
@@ -249,7 +249,7 @@ if nombre_producto:
             st.write(f"- Precio promedio ponderado: {precio_prom_pond:.2f}")
 
             # Consultar PRECIO VIGENTE
-            precio_vigente = st.number_input("¿Cuál es el precio vigente del producto?", min_value=0.0, format="%.2f")
+            precio_vigente = st.number_input("¿Cuál es el precio vigente del producto?", min_value=0, format="%d")
             if precio_vigente > 0:
                 if precio_vigente <= precio_prom_pond:
                     fechas_ordenadas = sorted([f for _, _, f in precios_cantidades if not pd.isnull(f)])
