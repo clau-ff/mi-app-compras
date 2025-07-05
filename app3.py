@@ -6,6 +6,7 @@ from PIL import Image, ExifTags
 import tempfile
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
+import gspread
 
 # LOGIN SIMPLE
 st.title("App Compras Familiares")
@@ -113,6 +114,10 @@ if nombre_producto:
         return tmp_file.name
 
     from PIL import Image, ExifTags
+    
+    SHEETS_ID = st.secrets["SHEETS_ID"]
+    gc = gspread.authorize(credentials)
+    worksheet = gc.open_by_key(SHEETS_ID).sheet1  # usa la hoja 1
 
     for idx, row in top3.iterrows():
         # Buscar comercio
@@ -157,7 +162,22 @@ if nombre_producto:
                 cantidad = st.number_input("Cantidad comprada", min_value=1, step=1, key=f"cantidad_{row['transactionsTableID']}")
                 submit = st.form_submit_button("Registrar en Google Sheets")
             if submit:
-                st.success("¡Compra registrada! (esto después se enviará a Google Sheets)")
+            # Verifica si ya existe la transacción en el Sheets (por id)
+            registros = worksheet.col_values(1)  # asume que la columna 1 es 'transactionsTableID'
+                if str(row['transactionsTableID']) not in registros:
+                    worksheet.append_row([
+                        str(row['transactionsTableID']),
+                        row['date'].strftime('%Y-%m-%d') if not pd.isnull(row['date']) else row['date'],
+                        row['notes'],
+                        comercio if comercio else '',
+                        archivo_img if archivo_img else '',
+                        precio,
+                        cantidad
+                    ])
+                    st.success("¡Compra guardada en Google Sheets!")
+                else:
+                    st.info("Ya existe un registro para esta transacción en Sheets, no se duplicó.")
+
         st.markdown("---")
 else:
     st.info("Por favor, ingresa el nombre del producto a buscar.")
