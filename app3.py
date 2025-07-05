@@ -160,14 +160,22 @@ if nombre_producto:
                 st.image(imagen, caption="Boleta", use_container_width=True)
                 mostrar_formulario = True
             elif ext == ".pdf":
-                # PREVISUALIZAR PDF
                 with open(ruta_local, "rb") as f:
                     base64_pdf = base64.b64encode(f.read()).decode('utf-8')
                 pdf_display = f"""
                     <iframe src="data:application/pdf;base64,{base64_pdf}" width="700" height="900" type="application/pdf"></iframe>
                 """
                 st.components.v1.html(pdf_display, height=920)
-                mostrar_formulario = True  # AHORA SIEMPRE muestra el formulario aunque sea PDF
+                with open(ruta_local, "rb") as f:
+                    st.download_button(
+                        label="Descargar boleta PDF",
+                        data=f,
+                        file_name=os.path.basename(ruta_local),
+                        mime="application/pdf"
+                    )
+                st.info("Si no ves el PDF arriba, tu navegador lo bloqueó. Haz clic en 'Descargar boleta PDF'.")
+                mostrar_formulario = True
+
             else:
                 st.warning("Formato de archivo no soportado para previsualización.")
                 mostrar_formulario = False
