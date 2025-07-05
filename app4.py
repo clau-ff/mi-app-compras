@@ -101,12 +101,7 @@ df_pic = leer_tabla("PICTURETABLE")
 nombre_producto = st.text_input("Escribe el nombre del producto que quieres buscar:", key="nombre_producto")
 
 if nombre_producto:
-    # Solo transacciones hasta hoy
-    from datetime import datetime
-    df_trans['date'] = pd.to_datetime(df_trans['date'], errors='coerce')
-    hoy = pd.Timestamp(datetime.now().date())
-    df_trans = df_trans[df_trans['date'] <= hoy]
-    
+   
     # Solo transacciones CON boleta
     trans_ids_con_boleta = set(df_pic['transactionID'].unique())
     df_trans_boleta = df_trans[df_trans['transactionsTableID'].isin(trans_ids_con_boleta)].copy()
@@ -129,7 +124,7 @@ if nombre_producto:
     SHEETS_ID = st.secrets["SHEETS_ID"]
     gc = gspread.authorize(credentials)
     worksheet = gc.open_by_key(SHEETS_ID).sheet1  # usa la hoja 1
-
+    filas = worksheet.get_all_records()
     top = top.sort_values("date", ascending=False)
     
     def descargar_y_mostrar_imagen(drive_service, file_name, carpeta_id):
@@ -240,7 +235,6 @@ if nombre_producto:
                         
             # --- ANÁLISIS DE PRECIOS HISTÓRICOS ---
             try:
-                filas = worksheet.get_all_records()
                 precios_hist = [float(f['Precio']) for f in filas 
                     if 'Producto buscado' in f and f['Producto buscado'].strip().lower() == nombre_producto.strip().lower()
                     and f['Precio'] not in ('', None)]
