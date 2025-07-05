@@ -128,6 +128,24 @@ if nombre_producto:
 
     top = top.sort_values("date", ascending=False)
     
+    def descargar_y_mostrar_imagen(drive_service, file_name, carpeta_id):
+        q = f"'{carpeta_id}' in parents and trashed = false and name = '{file_name}'"
+        results = drive_service.files().list(q=q, fields="files(id, name)").execute()
+        files = results.get('files', [])
+        if not files:
+            return None
+        file_id = files[0]['id']
+        request = drive_service.files().get_media(fileId=file_id)
+        tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix="." + file_name.split(".")[-1])
+        fh = open(tmp_file.name, "wb")
+        from googleapiclient.http import MediaIoBaseDownload
+        downloader = MediaIoBaseDownload(fh, request)
+        done = False
+        while not done:
+            status, done = downloader.next_chunk()
+        fh.close()
+        return tmp_file.name
+
     if top.empty:
         st.warning("No se encontraron compras similares con boleta.")
     else:
