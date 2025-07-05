@@ -7,6 +7,8 @@ import tempfile
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 import gspread
+import os
+import base64
 
 # LOGIN SIMPLE
 st.title("App Compras Familiares")
@@ -120,22 +122,8 @@ if nombre_producto:
     worksheet = gc.open_by_key(SHEETS_ID).sheet1  # usa la hoja 1
 
     for idx, row in top3.iterrows():
-        # Buscar comercio
-        comercio = None
-        if 'itemID' in row and not pd.isnull(row['itemID']):
-            item_row = df_item[df_item['itemTableID'] == row['itemID']]
-            if not item_row.empty:
-                comercio = item_row.iloc[0]['itemName']
+        # ... (tus búsquedas de comercio, archivo_img y ruta_local) ...
 
-        # Buscar imagen
-        archivo_img = None
-        ruta_local = None
-        pic = df_pic[df_pic['transactionID'] == row['transactionsTableID']]
-        if not pic.empty:
-            archivo_img = pic.iloc[0]['pictureFileName']
-            ruta_local = descargar_y_mostrar_imagen(drive_service, archivo_img, pictures_id)
-
-        # Mostrar datos siempre, imagen solo si hay archivo
         st.markdown(f"- **Fecha:** {row['date'].strftime('%Y-%m-%d') if not pd.isnull(row['date']) else row['date']}")
         st.markdown(f"  - **Nota:** {row['notes']}")
         if comercio:
@@ -143,27 +131,44 @@ if nombre_producto:
         if archivo_img:
             st.markdown(f"  - **Nombre archivo imagen:** {archivo_img}")
 
-        # Mostrar imagen bien rotada y grande, solo si hay ruta local
+        mostrar_formulario = False
+
         if ruta_local:
-            imagen = Image.open(ruta_local)
-            width, height = imagen.size
-            # Forzar verticalidad si necesario
-            if width > height:
-                imagen = imagen.rotate(90, expand=True)
-            max_width = 700
-            if imagen.size[0] > max_width:
-                new_height = int(max_width * imagen.size[1] / imagen.size[0])
-                imagen = imagen.resize((max_width, new_height))
-            st.image(imagen, caption="Boleta", use_container_width=True)
+            ext = os.path.splitext(ruta_local)[-1].lower()
+            if ext in [".jpg", ".jpeg", ".png"]:
+                imagen = Image.open(ruta_local)
+                width, height = imagen.size
+                if width > height:
+                    imagen = imagen.rotate(90, expand=True)
+                max_width = 700
+                if imagen.size[0] > max_width:
+                    new_height = int(max_width * imagen.size[1] / imagen.size[0])
+                    imagen = imagen.resize((max_width, new_height))
+                st.image(imagen, caption="Boleta", use_container_width=True)
+                mostrar_formulario = True
+            elif ext == ".pdf":
+                # PREVISUALIZAR PDF
+                with open(ruta_local, "rb") as f:
+                    base64_pdf = base64.b64encode(f.read()).decode('utf-8')
+                pdf_display = f"""
+                    <iframe src="data:application/pdf;base64,{base64_pdf}" width="700" height="900" type="application/pdf"></iframe>
+                """
+                st.components.v1.html(pdf_display, height=920)
+                mostrar_formulario = True  # AHORA SIEMPRE muestra el formulario aunque sea PDF
+            else:
+                st.warning("Formato de archivo no soportado para previsualización.")
+                mostrar_formulario = False
+        else:
+            st.info("No hay archivo de boleta disponible.")
 
             # Formulario SOLO si hay imagen
+        if mostrar_formulario:
             with st.form(f"form_{row['transactionsTableID']}"):
                 precio = st.number_input("Precio pagado", min_value=0.0, format="%.2f", key=f"precio_{row['transactionsTableID']}")
                 cantidad = st.number_input("Cantidad comprada", min_value=1, step=1, key=f"cantidad_{row['transactionsTableID']}")
                 submit = st.form_submit_button("Registrar en Google Sheets")
             if submit:
-            # Verifica si ya existe la transacción en el Sheets (por id)
-            registros = worksheet.col_values(1)  # asume que la columna 1 es 'transactionsTableID'
+                registros = worksheet.col_values(1)
                 if str(row['transactionsTableID']) not in registros:
                     worksheet.append_row([
                         str(row['transactionsTableID']),
@@ -177,7 +182,6 @@ if nombre_producto:
                     st.success("¡Compra guardada en Google Sheets!")
                 else:
                     st.info("Ya existe un registro para esta transacción en Sheets, no se duplicó.")
-
         st.markdown("---")
 else:
     st.info("Por favor, ingresa el nombre del producto a buscar.")
