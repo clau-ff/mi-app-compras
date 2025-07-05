@@ -20,7 +20,6 @@ if password_input != PASSWORD:
 st.success("¡Bienvenida/o!")
 
 # ----- GOOGLE DRIVE SERVICE ACCOUNT -----
-import os
 if not "SERVICE_ACCOUNT_JSON" in st.secrets:
     st.error("No se encontró SERVICE_ACCOUNT_JSON en tus Secrets.")
     st.stop()
@@ -119,14 +118,14 @@ if nombre_producto:
         resto = resto.sort_values("fuzzy_score", ascending=False)
         n_faltan = 3 - len(top)
         top = pd.concat([top, resto.head(n_faltan)])
-
+    
     SHEETS_ID = st.secrets["SHEETS_ID"]
     gc = gspread.authorize(credentials)
     worksheet = gc.open_by_key(SHEETS_ID).sheet1  # usa la hoja 1
     filas = worksheet.get_all_records()
     ids_existentes = worksheet.col_values(1)
     top = top.sort_values("date", ascending=False)
-
+    
     def descargar_y_mostrar_imagen(drive_service, file_name, carpeta_id):
         q = f"'{carpeta_id}' in parents and trashed = false and name = '{file_name}'"
         results = drive_service.files().list(q=q, fields="files(id, name)").execute()
@@ -145,156 +144,134 @@ if nombre_producto:
         fh.close()
         return tmp_file.name
 
-    if top.empty:
-        st.warning("No se encontraron compras similares con boleta.")
-    else:
-        for idx, row in top.iterrows():
-            comercio = None
-            archivo_img = None
-            ruta_local = None
-            if 'itemID' in row and not pd.isnull(row['itemID']):
-                item_row = df_item[df_item['itemTableID'] == row['itemID']]
-                if not item_row.empty:
-                    comercio = item_row.iloc[0]['itemName']
+    for idx, row in top.iterrows():
+        comercio = None
+        archivo_img = None
+        ruta_local = None
+        if 'itemID' in row and not pd.isnull(row['itemID']):
+            item_row = df_item[df_item['itemTableID'] == row['itemID']]
+            if not item_row.empty:
+                comercio = item_row.iloc[0]['itemName']
 
-            # BUSCAR imagen AHORA
-            pic = df_pic[df_pic['transactionID'] == row['transactionsTableID']]
-            if not pic.empty:
-                archivo_img = pic.iloc[0]['pictureFileName']
-                ruta_local = descargar_y_mostrar_imagen(drive_service, archivo_img, pictures_id)
+        # BUSCAR imagen AHORA
+        pic = df_pic[df_pic['transactionID'] == row['transactionsTableID']]
+        if not pic.empty:
+            archivo_img = pic.iloc[0]['pictureFileName']
+            ruta_local = descargar_y_mostrar_imagen(drive_service, archivo_img, pictures_id)
 
-            # Mostrar datos
-            st.markdown(f"- **Fecha:** {row['date'].strftime('%Y-%m-%d') if not pd.isnull(row['date']) else row['date']}")
-            st.markdown(f"  - **Nota:** {row['notes']}")
-            if comercio:
-                st.markdown(f"  - **Lugar/Comercio:** {comercio}")
-            if archivo_img:
-                st.markdown(f"  - **Nombre archivo imagen:** {archivo_img}")
+        st.markdown(f"- **Fecha:** {row['date'].strftime('%Y-%m-%d') if not pd.isnull(row['date']) else row['date']}")
+        st.markdown(f"  - **Nota:** {row['notes']}")
+        if comercio:
+            st.markdown(f"  - **Lugar/Comercio:** {comercio}")
+        if archivo_img:
+            st.markdown(f"  - **Nombre archivo imagen:** {archivo_img}")
 
-            mostrar_formulario = False
+        mostrar_formulario = False
 
-            if ruta_local:
-                ext = os.path.splitext(ruta_local)[-1].lower()
-                if ext in [".jpg", ".jpeg", ".png"]:
-                    imagen = Image.open(ruta_local)
-                    width, height = imagen.size
-                    if width > height:
-                        imagen = imagen.rotate(90, expand=True)
-                    max_width = 700
-                    if imagen.size[0] > max_width:
-                        new_height = int(max_width * imagen.size[1] / imagen.size[0])
-                        imagen = imagen.resize((max_width, new_height))
-                    st.image(imagen, caption="Boleta", use_container_width=True)
-                    mostrar_formulario = True
-                elif ext == ".pdf":
-                    with open(ruta_local, "rb") as f:
-                        base64_pdf = base64.b64encode(f.read()).decode('utf-8')
-                    pdf_display = f"""
-                        <iframe src="data:application/pdf;base64,{base64_pdf}" width="700" height="900" type="application/pdf"></iframe>
-                    """
-                    st.components.v1.html(pdf_display, height=920)
-                    with open(ruta_local, "rb") as f:
-                        st.download_button(
-                            label="Descargar boleta PDF",
-                            data=f,
-                            file_name=os.path.basename(ruta_local),
-                            mime="application/pdf"
-                        )
-                    st.info("Si no ves el PDF arriba, tu navegador lo bloqueó. Haz clic en 'Descargar boleta PDF'.")
-                    mostrar_formulario = True
-
-                else:
-                    st.warning("Formato de archivo no soportado para previsualización.")
-                    mostrar_formulario = False
+        if ruta_local:
+            ext = os.path.splitext(ruta_local)[-1].lower()
+            if ext in [".jpg", ".jpeg", ".png"]:
+                imagen = Image.open(ruta_local)
+                width, height = imagen.size
+                if width > height:
+                    imagen = imagen.rotate(90, expand=True)
+                max_width = 700
+                if imagen.size[0] > max_width:
+                    new_height = int(max_width * imagen.size[1] / imagen.size[0])
+                    imagen = imagen.resize((max_width, new_height))
+                st.image(imagen, caption="Boleta", use_container_width=True)
+                mostrar_formulario = True
+            elif ext == ".pdf":
+                with open(ruta_local, "rb") as f:
+                    base64_pdf = base64.b64encode(f.read()).decode('utf-8')
+                pdf_display = f"""
+                    <iframe src="data:application/pdf;base64,{base64_pdf}" width="700" height="900" type="application/pdf"></iframe>
+                """
+                st.components.v1.html(pdf_display, height=920)
+                with open(ruta_local, "rb") as f:
+                    st.download_button(
+                        label="Descargar boleta PDF",
+                        data=f,
+                        file_name=os.path.basename(ruta_local),
+                        mime="application/pdf"
+                    )
+                st.info("Si no ves el PDF arriba, tu navegador lo bloqueó. Haz clic en 'Descargar boleta PDF'.")
+                mostrar_formulario = True
             else:
-                st.info("No hay archivo de boleta disponible.")
+                st.warning("Formato de archivo no soportado para previsualización.")
+                mostrar_formulario = False
+        else:
+            st.info("No hay archivo de boleta disponible.")
 
-            # FORMULARIO SIEMPRE SI HAY BOLETA (imagen o PDF)
-            if mostrar_formulario:
-                with st.form(f"form_{row['transactionsTableID']}"):
-                    precio = st.number_input("Precio pagado", min_value=0.0, format="%.2f", key=f"precio_{row['transactionsTableID']}")
-                    cantidad = st.number_input("Cantidad comprada", min_value=1, step=1, key=f"cantidad_{row['transactionsTableID']}")
-                    submit = st.form_submit_button("Registrar en Google Sheets")
-                if submit:
-                    if str(row['transactionsTableID']) not in ids_existentes:
-                        worksheet.append_row([
-                            nombre_producto,  # Producto buscado
-                            str(row['transactionsTableID']),
-                            row['date'].strftime('%Y-%m-%d') if not pd.isnull(row['date']) else row['date'],
-                            row['notes'],
-                            comercio if comercio else '',
-                            archivo_img if archivo_img else '',
-                            precio,
-                            cantidad
-                        ])
-                        st.success("¡Compra guardada en Google Sheets!")
-                        ids_existentes.append(str(row['transactionsTableID']))
+        if mostrar_formulario:
+            with st.form(f"form_{row['transactionsTableID']}"):
+                precio = st.number_input("Precio pagado", min_value=0.0, format="%.2f", key=f"precio_{row['transactionsTableID']}")
+                cantidad = st.number_input("Cantidad comprada", min_value=1, step=1, key=f"cantidad_{row['transactionsTableID']}")
+                submit = st.form_submit_button("Registrar en Google Sheets")
+            if submit:
+                if str(row['transactionsTableID']) not in ids_existentes:
+                    worksheet.append_row([
+                        nombre_producto,  # Producto buscado
+                        str(row['transactionsTableID']),
+                        row['date'].strftime('%Y-%m-%d') if not pd.isnull(row['date']) else row['date'],
+                        row['notes'],
+                        comercio if comercio else '',
+                        archivo_img if archivo_img else '',
+                        precio,
+                        cantidad
+                    ])
+                    st.success("¡Compra guardada en Google Sheets!")
+                    ids_existentes.append(str(row['transactionsTableID']))
+                else:
+                    st.info("Ya existe un registro para esta transacción en Sheets, no se duplicó.")
+
+    st.markdown("---")
+
+    # --- ANÁLISIS Y RECOMENDACIÓN SÓLO SI TODAS LAS COMPRAS ESTÁN REGISTRADAS ---
+    trans_ids_mostradas = set(str(row['transactionsTableID']) for idx, row in top.iterrows())
+    registros_en_sheet = set(ids_existentes)
+
+    if trans_ids_mostradas.issubset(registros_en_sheet):
+        precios_cantidades = [
+            (float(f['Precio']), float(f['Cantidad']), pd.to_datetime(f['Fecha'], errors='coerce'))
+            for f in filas
+            if 'Producto buscado' in f and f['Producto buscado'].strip().lower() == nombre_producto.strip().lower()
+            and f['Precio'] not in ('', None) and f['Cantidad'] not in ('', None)
+        ]
+        if precios_cantidades:
+            suma_precios_x_cant = sum(p * c for p, c, _ in precios_cantidades)
+            suma_cantidades = sum(c for _, c, _ in precios_cantidades)
+            precio_min = min(p for p, _, _ in precios_cantidades)
+            precio_prom_pond = suma_precios_x_cant / suma_cantidades if suma_cantidades > 0 else 0
+
+            st.subheader("Análisis de precios históricos (ponderado por cantidad):")
+            st.write(f"- Precio mínimo: {precio_min:.2f}")
+            st.write(f"- Precio promedio ponderado: {precio_prom_pond:.2f}")
+
+            # Consultar PRECIO VIGENTE
+            precio_vigente = st.number_input("¿Cuál es el precio vigente del producto?", min_value=0.0, format="%.2f")
+            if precio_vigente > 0:
+                if precio_vigente <= precio_prom_pond:
+                    fechas_ordenadas = sorted([f for _, _, f in precios_cantidades if not pd.isnull(f)])
+                    if len(fechas_ordenadas) > 1:
+                        meses = max(1, ((fechas_ordenadas[-1] - fechas_ordenadas[0]).days // 30))
                     else:
-                        st.info("Ya existe un registro para esta transacción en Sheets, no se duplicó.")
+                        meses = 1
+                    consumo_prom_mensual = suma_cantidades / meses if meses else suma_cantidades
+                    cantidad_recomendada = int(round(consumo_prom_mensual * 3))
 
-                    # --- ANÁLISIS DE PRECIOS HISTÓRICOS (ponderado por cantidad) ---
-                    precios_cantidades = [
-                        (float(f['Precio']), int(f['Cantidad']))
-                        for f in filas
-                        if 'Producto buscado' in f
-                        and f['Producto buscado'].strip().lower() == nombre_producto.strip().lower()
-                        and f['Precio'] not in ('', None)
-                        and f['Cantidad'] not in ('', None)
-                    ]
-                    if precios_cantidades:
-                        precios = [p for p, q in precios_cantidades]
-                        cantidades = [q for p, q in precios_cantidades]
-                        precio_min = min(precios)
-                        precio_prom_pond = sum(p*q for p, q in precios_cantidades) / sum(cantidades)
-                        st.subheader("Análisis de precios históricos (ponderado por cantidad):")
-                        st.write(f"- Precio mínimo: {precio_min:.2f}")
-                        st.write(f"- Precio promedio ponderado: {precio_prom_pond:.2f}")
-                    else:
-                        st.info("No hay historial suficiente para analizar precios aún.")
+                    fecha_ultima = max(fechas_ordenadas)
+                    dias_desde_ultima = (pd.Timestamp(datetime.now().date()) - fecha_ultima).days
 
-                    # --- CÁLCULO DE CANTIDAD RECOMENDADA Y CONSUMO PROMEDIO ---
-                    fechas = [
-                        pd.to_datetime(f['Fecha'], errors='coerce')
-                        for f in filas
-                        if 'Producto buscado' in f
-                        and f['Producto buscado'].strip().lower() == nombre_producto.strip().lower()
-                        and f['Fecha'] not in ('', None)
-                    ]
-                    fechas = sorted([d for d in fechas if pd.notnull(d)])
-                    cantidades_hist = [
-                        int(f['Cantidad'])
-                        for f in filas
-                        if 'Producto buscado' in f
-                        and f['Producto buscado'].strip().lower() == nombre_producto.strip().lower()
-                        and f['Cantidad'] not in ('', None)
-                    ]
-
-                    if fechas and cantidades_hist and len(fechas) > 1:
-                        total_meses = ((fechas[-1] - fechas[0]).days) / 30.0
-                        total_consumo = sum(cantidades_hist)
-                        consumo_mensual = total_consumo / total_meses if total_meses > 0 else 0
-                        st.write(f"- Consumo promedio mensual: {consumo_mensual:.1f} unidades/mes")
-                    else:
-                        consumo_mensual = None
-                        st.info("No hay suficiente historial para calcular consumo mensual.")
-
-                    # --- DÍAS DESDE LA ÚLTIMA COMPRA ---
-                    if fechas:
-                        ultima_fecha = fechas[-1]
-                        dias_desde_ultima = (pd.Timestamp(datetime.now().date()) - ultima_fecha).days
-                        st.write(f"- Días desde la última compra: {dias_desde_ultima} días")
-                    else:
-                        dias_desde_ultima = None
-
-                    # --- SUGERENCIA DE CANTIDAD SOLO SI PRECIO VIGENTE <= PRECIO PROMEDIO PONDERADO ---
-                    if precios_cantidades and consumo_mensual:
-                        if float(precio) <= precio_prom_pond:
-                            sugerido = int(round(consumo_mensual * 3))
-                            st.success(f"✅ El precio vigente ({precio:.2f}) es menor o igual al promedio histórico. "
-                                    f"Se recomienda comprar **{sugerido} unidades** para cubrir 3 meses (consumo promedio mensual: {consumo_mensual:.1f}).")
-                        else:
-                            st.info(f"El precio vigente ({precio:.2f}) es mayor al promedio histórico. No se recomienda comprar más de lo habitual.")
-
-            st.markdown("---")
+                    st.success(
+                        f"¡Conviene comprar! Cantidad recomendada para 3 meses: **{cantidad_recomendada}** unidades.\n"
+                        f"(Consumo promedio mensual: {consumo_prom_mensual:.2f}; Última compra: {fecha_ultima.strftime('%Y-%m-%d')}, hace {dias_desde_ultima} días)"
+                    )
+                else:
+                    st.info("El precio vigente NO conviene (es mayor al precio promedio). No se recomienda comprar.")
+        else:
+            st.info("No hay historial suficiente para analizar precios aún.")
+    else:
+        st.info("Debes ingresar precio y cantidad para todas las compras mostradas antes de analizar precios.")
 else:
     st.info("Por favor, ingresa el nombre del producto a buscar.")
