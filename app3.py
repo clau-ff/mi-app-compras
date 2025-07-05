@@ -12,7 +12,7 @@ import base64
 
 # LOGIN SIMPLE
 st.title("App Compras Familiares")
-PASSWORD = "ratas2025"
+PASSWORD = st.secrets["CLAVE_FAMILIAR"]
 password_input = st.text_input("Ingresa la clave familiar", type="password")
 if password_input != PASSWORD:
     st.warning("Clave incorrecta o pendiente de ingresar.")
