@@ -125,6 +125,10 @@ if nombre_producto:
         resto = resto.sort_values("fuzzy_score", ascending=False)
         n_faltan = 3 - len(top)
         top = pd.concat([top, resto.head(n_faltan)])
+    
+    SHEETS_ID = st.secrets["SHEETS_ID"]
+    gc = gspread.authorize(credentials)
+    worksheet = gc.open_by_key(SHEETS_ID).sheet1  # usa la hoja 1
 
     top = top.sort_values("date", ascending=False)
     
