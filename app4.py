@@ -225,6 +225,7 @@ if nombre_producto:
                     registros = worksheet.col_values(1)
                     if str(row['transactionsTableID']) not in registros:
                         worksheet.append_row([
+                            nombre_producto,  # <-- Nuevo campo: producto buscado
                             str(row['transactionsTableID']),
                             row['date'].strftime('%Y-%m-%d') if not pd.isnull(row['date']) else row['date'],
                             row['notes'],
@@ -236,26 +237,30 @@ if nombre_producto:
                         st.success("¡Compra guardada en Google Sheets!")
                     else:
                         st.info("Ya existe un registro para esta transacción en Sheets, no se duplicó.")
-                # --- ANÁLISIS DE PRECIOS HISTÓRICOS ---
-                try:
-                    filas = worksheet.get_all_records()
-                    precios_hist = [float(f['Precio']) for f in filas if f['Nota'].strip().lower() == row['notes'].strip().lower() and f['Precio'] not in ('', None)]
-                    if precios_hist:
-                        st.subheader("Análisis de precios históricos:")
-                        st.write(f"- Precio mínimo: {min(precios_hist):.2f}")
-                        st.write(f"- Precio promedio: {sum(precios_hist)/len(precios_hist):.2f}")
-                    else:
-                        st.info("No hay historial suficiente para analizar precios aún.")
-                except Exception as ex:
+                        
+            # --- ANÁLISIS DE PRECIOS HISTÓRICOS ---
+            try:
+                filas = worksheet.get_all_records()
+                precios_hist = [float(f['Precio']) for f in filas 
+                    if 'Producto buscado' in f and f['Producto buscado'].strip().lower() == nombre_producto.strip().lower()
+                    and f['Precio'] not in ('', None)]
+                if precios_hist:
+                    st.subheader("Análisis de precios históricos:")
+                    st.write(f"- Precio mínimo: {min(precios_hist):.2f}")
+                    st.write(f"- Precio promedio: {sum(precios_hist)/len(precios_hist):.2f}")
+                else:
                     st.info("No hay historial suficiente para analizar precios aún.")
+            except Exception as ex:
+                st.info("No hay historial suficiente para analizar precios aún.")
 
-                # --- SUGERENCIA DE CANTIDAD ---
-                if 'precio' in locals() and precios_hist:
-                    if float(precio) == min(precios_hist):
-                        sugerido = cantidad * 2 if cantidad > 0 else 1
-                        st.success(f"¡El precio actual es el más bajo! Se recomienda comprar {sugerido} unidades.")
-                    else:
-                        st.info("El precio no es el más bajo. Compra la cantidad habitual.")
+
+            # --- SUGERENCIA DE CANTIDAD ---
+            if 'precio' in locals() and precios_hist:
+                if float(precio) == min(precios_hist):
+                    sugerido = cantidad * 2 if cantidad > 0 else 1
+                    st.success(f"¡El precio actual es el más bajo! Se recomienda comprar {sugerido} unidades.")
+                else:
+                    st.info("El precio no es el más bajo. Compra la cantidad habitual.")
             st.markdown("---")
 else:
     st.info("Por favor, ingresa el nombre del producto a buscar.")
