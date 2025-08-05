@@ -1,5 +1,5 @@
 # Versión 3 de la App Compras Familiares (app7.py)
-# Mejora: cantidad de registros dinámica, opción de descartar y agregar unidad
+# Mejora: cantidad de registros dinámica, opción de descartar y agregar unidad y análisis extendido
 
 import streamlit as st
 import pandas as pd
@@ -24,7 +24,6 @@ if password_input != PASSWORD:
     st.stop()
 st.success("¡Bienvenida/o!")
 
-# --- Google Drive y Sheets ---
 if not "SERVICE_ACCOUNT_JSON" in st.secrets:
     st.error("No se encontró SERVICE_ACCOUNT_JSON en tus Secrets.")
     st.stop()
@@ -42,7 +41,6 @@ worksheet = gc.open_by_key(st.secrets["SHEETS_ID"]).sheet1
 filas = worksheet.get_all_records()
 ids_existentes = worksheet.col_values(2)
 
-# --- Buscar archivo Bluecoins más reciente ---
 def buscar_carpeta(nombre, parent_id=None):
     q = f"name = '{nombre}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
     if parent_id:
@@ -75,7 +73,6 @@ fh.close()
 fecha_modif = latest_file['modifiedTime']
 st.info(f"Archivo descargado: {latest_file['name']} (última modificación: {fecha_modif.replace('T', ' ').replace('Z','')})")
 
-# --- Manejo base de datos ---
 @st.cache_data
 def leer_tabla(nombre_tabla):
     with sqlite3.connect("bluecoins.fydb") as conn:
@@ -88,16 +85,15 @@ df_trans = df_trans[df_trans['date'] <= pd.Timestamp(datetime.now().date())]
 df_item = leer_tabla("ITEMTABLE")
 df_pic = leer_tabla("PICTURETABLE")
 
-# --- Normalización de texto ---
 def normalizar(texto):
     if not isinstance(texto, str):
         return ""
     texto = unicodedata.normalize('NFKD', texto).encode('ascii', 'ignore').decode('utf-8')
     return texto.lower().strip()
 
-# --- Búsqueda flexible ---
 nombre_producto = st.text_input("Producto a buscar:")
 solo_con_boleta = st.radio("¿Mostrar sólo registros con boleta?", options=["Sí", "No"], index=0)
+
 if nombre_producto:
     if "descartados" not in st.session_state:
         st.session_state.descartados = set()
@@ -193,21 +189,51 @@ if nombre_producto:
                     ])
                     st.success("¡Compra registrada!")
 
-    # --- Análisis ---
+    # --- Análisis extendido ---
     registros_sheet = set(ids_existentes)
     if trans_ids_mostradas.issubset(registros_sheet):
         datos = [
             (float(f['Precio']), float(f['Cantidad']), f.get('Unidad', ''), pd.to_datetime(f['Fecha'], errors='coerce'))
-            for f in filas if normalizar(f['Producto buscado']) == nombre_normalizado
+            for f in filas
+            if normalizar(f['Producto buscado']) == nombre_normalizado
+            and f.get('Unidad', '') != '' and f['Precio'] not in ('', None) and f['Cantidad'] not in ('', None)
         ]
         if datos:
-            st.subheader("Resumen por unidad:")
-            for unidad in set(u for _, _, u, _ in datos if u):
-                subset = [(p, c, d) for p, c, u2, d in datos if u2 == unidad]
-                total = sum(p*c for p, c, _ in subset)
-                total_cant = sum(c for _, c, _ in subset)
-                consumo_mensual = total_cant / max(1, ((max(d for _, _, d in subset) - min(d for _, _, d in subset)).days // 30))
-                st.markdown(f"- Unidad **{unidad}**: Precio prom: {total/total_cant:.2f}, Consumo mensual: {consumo_mensual:.2f}")
+            st.subheader("📊 Análisis de compras por unidad")
+            unidades = set(u for _, _, u, _ in datos if u)
+            for unidad in unidades:
+                subset = [(p, c, d) for p, c, u2, d in datos if u2 == unidad and p > 0 and c > 0 and not pd.isnull(d)]
+                if not subset:
+                    continue
+                precios, cantidades, fechas = zip(*subset)
+                total_cantidad = sum(cantidades)
+                total_valor = sum(p * c for p, c, _ in subset)
+                promedio_cantidad = total_cantidad / len(subset)
+                valor_promedio_compra = total_valor / len(subset)
+                valor_unitario_promedio = total_valor / total_cantidad
+                valor_unitario_maximo = max(p / c for p, c, _ in subset)
+                valor_unitario_minimo = min(p / c for p, c, _ in subset)
+                meses = max(1, (max(fechas) - min(fechas)).days // 30)
+                consumo_mensual = total_cantidad / meses
+
+                def formatear(valor):
+                    return f"{valor:.1f}" if valor < 100 else f"{valor:.0f}"
+
+                st.markdown(f"### Unidad: **{unidad}**")
+                st.markdown("| Métrica | Valor |")
+                st.markdown("|--------|--------|")
+                st.markdown(f"| Consumo promedio mensual | {formatear(consumo_mensual)} {unidad} |")
+                st.markdown(f"| Compra promedio | {formatear(promedio_cantidad)} {unidad} |")
+                st.markdown(f"| Valor promedio compra | {formatear(valor_promedio_compra)} $ |")
+                st.markdown(f"| Valor unitario promedio | {formatear(valor_unitario_promedio)} $/{unidad} |")
+                st.markdown(f"| Valor unitario máximo | {formatear(valor_unitario_maximo)} $/{unidad} |")
+                st.markdown(f"| Valor unitario mínimo | {formatear(valor_unitario_minimo)} $/{unidad} |")
+
+                st.markdown("#### Calculadora de compras")
+                cant = st.number_input(f"¿Cuánta cantidad quieres comprar? ({unidad})", min_value=0.0, key=f"calc_{unidad}")
+                if cant > 0:
+                    valor_estimado = cant * valor_unitario_promedio
+                    st.info(f"Valor referencial estimado: **${formatear(valor_estimado)}** por {cant} {unidad}")
         else:
             st.info("No hay datos suficientes para análisis.")
 else:
