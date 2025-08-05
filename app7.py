@@ -13,6 +13,7 @@ import gspread
 import os
 import base64
 from datetime import datetime
+from googleapiclient.http import MediaIoBaseDownload
 
 st.title("App Compras Familiares v3")
 PASSWORD = st.secrets["CLAVE_FAMILIAR"]
@@ -40,6 +41,39 @@ worksheet = gc.open_by_key(st.secrets["SHEETS_ID"]).sheet1
 filas = worksheet.get_all_records()
 ids_existentes = worksheet.col_values(2)
 
+# --- Buscar archivo Bluecoins más reciente ---
+def buscar_carpeta(nombre, parent_id=None):
+    q = f"name = '{nombre}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
+    if parent_id:
+        q += f" and '{parent_id}' in parents"
+    results = drive_service.files().list(q=q, fields="files(id, name)").execute()
+    files = results.get('files', [])
+    if not files:
+        return None
+    return files[0]['id']
+
+bluecoins_id = buscar_carpeta('Bluecoins')
+quicksync_id = buscar_carpeta('QuickSync', parent_id=bluecoins_id)
+pictures_id = buscar_carpeta('Pictures', parent_id=bluecoins_id)
+
+q = f"'{quicksync_id}' in parents and trashed = false and name contains '.fydb'"
+results = drive_service.files().list(q=q, fields="files(id, name, modifiedTime)").execute()
+fydb_files = results.get('files', [])
+if not fydb_files:
+    st.error("No se encontraron archivos .fydb en la carpeta QuickSync.")
+    st.stop()
+fydb_files.sort(key=lambda x: x['modifiedTime'], reverse=True)
+latest_file = fydb_files[0]
+request = drive_service.files().get_media(fileId=latest_file['id'])
+fh = open("bluecoins.fydb", "wb")
+downloader = MediaIoBaseDownload(fh, request)
+done = False
+while done is False:
+    status, done = downloader.next_chunk()
+fh.close()
+fecha_modif = latest_file['modifiedTime']
+st.info(f"Archivo descargado: {latest_file['name']} (última modificación: {fecha_modif.replace('T', ' ').replace('Z','')})")
+
 # --- Manejo base de datos ---
 @st.cache_data
 def leer_tabla(nombre_tabla):
@@ -47,9 +81,6 @@ def leer_tabla(nombre_tabla):
         df = pd.read_sql_query(f"SELECT * FROM {nombre_tabla}", conn)
     return df
 
-# (Aquí iría el bloque de descarga del .fydb omitido por brevedad)
-
-# Simulamos lectura local (reemplazar por lógica de descarga real)
 df_trans = leer_tabla("TRANSACTIONSTABLE")
 df_trans['date'] = pd.to_datetime(df_trans['date'], errors='coerce')
 df_trans = df_trans[df_trans['date'] <= pd.Timestamp(datetime.now().date())]
