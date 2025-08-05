@@ -120,7 +120,7 @@ if nombre_producto:
         st.markdown(f"**Fecha:** {row['date'].strftime('%Y-%m-%d')} - {row['notes']}")
         if st.button("Descartar", key=f"descartar_{tid}"):
             st.session_state.descartados.add(tid)
-            st.experimental_rerun()
+            st.rerun()
 
         with st.form(f"form_{tid}"):
             precio = st.number_input("Precio", min_value=0, key=f"precio_{tid}")
