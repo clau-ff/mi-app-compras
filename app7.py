@@ -14,6 +14,7 @@ import os
 import base64
 from datetime import datetime
 from googleapiclient.http import MediaIoBaseDownload
+import unicodedata
 
 st.title("App Compras Familiares v3")
 PASSWORD = st.secrets["CLAVE_FAMILIAR"]
@@ -87,6 +88,13 @@ df_trans = df_trans[df_trans['date'] <= pd.Timestamp(datetime.now().date())]
 df_item = leer_tabla("ITEMTABLE")
 df_pic = leer_tabla("PICTURETABLE")
 
+# --- Normalización de texto (ignorar acentos y mayúsculas) ---
+def normalizar(texto):
+    if not isinstance(texto, str):
+        return ""
+    texto = unicodedata.normalize('NFKD', texto).encode('ascii', 'ignore').decode('utf-8')
+    return texto.lower().strip()
+
 # --- Búsqueda flexible ---
 nombre_producto = st.text_input("Producto a buscar:")
 if nombre_producto:
@@ -95,7 +103,11 @@ if nombre_producto:
 
     trans_ids_con_boleta = set(df_pic['transactionID'].unique())
     df_trans_boleta = df_trans[df_trans['transactionsTableID'].isin(trans_ids_con_boleta)].copy()
-    exactos = df_trans_boleta[df_trans_boleta['notes'].str.contains(nombre_producto, case=False, na=False)]
+
+    # Coincidencia exacta normalizada
+    df_trans_boleta['notes_norm'] = df_trans_boleta['notes'].apply(normalizar)
+    nombre_normalizado = normalizar(nombre_producto)
+    exactos = df_trans_boleta[df_trans_boleta['notes_norm'].str.contains(nombre_normalizado, na=False)]
     exactos = exactos.sort_values("date", ascending=False)
 
     n_resultados = st.number_input("¿Cuántas compras quieres ver?", min_value=3, max_value=20, value=3)
@@ -104,12 +116,28 @@ if nombre_producto:
 
     if len(top) < n_resultados:
         resto = df_trans_boleta[~df_trans_boleta['transactionsTableID'].isin(ids_ya)].copy()
-        resto['score'] = resto['notes'].astype(str).apply(lambda x: fuzz.partial_ratio(nombre_producto.lower(), x.lower()))
+        resto['score'] = resto['notes_norm'].apply(lambda x: fuzz.partial_ratio(nombre_normalizado, x))
         resto = resto[resto['score'] > 70].sort_values("score", ascending=False)
         top = pd.concat([top, resto.head(n_resultados - len(top))])
 
     top = top.sort_values("date", ascending=False)
     trans_ids_mostradas = set()
+
+    def descargar_y_mostrar_imagen(file_name):
+        q = f"'{pictures_id}' in parents and trashed = false and name = '{file_name}'"
+        results = drive_service.files().list(q=q, fields="files(id, name)").execute()
+        files = results.get('files', [])
+        if not files:
+            return None
+        file_id = files[0]['id']
+        request = drive_service.files().get_media(fileId=file_id)
+        tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix="." + file_name.split(".")[-1])
+        with open(tmp_file.name, "wb") as fh:
+            downloader = MediaIoBaseDownload(fh, request)
+            done = False
+            while not done:
+                status, done = downloader.next_chunk()
+        return tmp_file.name
 
     for idx, row in top.iterrows():
         tid = row['transactionsTableID']
@@ -121,6 +149,22 @@ if nombre_producto:
         if st.button("Descartar", key=f"descartar_{tid}"):
             st.session_state.descartados.add(tid)
             st.rerun()
+
+        archivo_img = df_pic[df_pic['transactionID'] == tid]['pictureFileName'].values
+        if len(archivo_img) > 0:
+            ruta = descargar_y_mostrar_imagen(archivo_img[0])
+            if ruta:
+                ext = os.path.splitext(ruta)[-1].lower()
+                if ext in [".jpg", ".jpeg", ".png"]:
+                    imagen = Image.open(ruta)
+                    st.image(imagen, caption="Boleta")
+                elif ext == ".pdf":
+                    with open(ruta, "rb") as f:
+                        base64_pdf = base64.b64encode(f.read()).decode('utf-8')
+                    st.components.v1.html(
+                        f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="700" height="900" type="application/pdf"></iframe>',
+                        height=920
+                    )
 
         with st.form(f"form_{tid}"):
             precio = st.number_input("Precio", min_value=0, key=f"precio_{tid}")
@@ -136,7 +180,7 @@ if nombre_producto:
                             comercio = item_row.iloc[0]['itemName']
                     worksheet.append_row([
                         nombre_producto, str(tid), row['date'].strftime('%Y-%m-%d'), row['notes'],
-                        comercio, '', precio, cantidad, unidad
+                        comercio, archivo_img[0] if len(archivo_img) > 0 else '', precio, cantidad, unidad
                     ])
                     st.success("¡Compra registrada!")
 
@@ -145,7 +189,7 @@ if nombre_producto:
     if trans_ids_mostradas.issubset(registros_sheet):
         datos = [
             (float(f['Precio']), float(f['Cantidad']), f.get('Unidad', ''), pd.to_datetime(f['Fecha'], errors='coerce'))
-            for f in filas if f['Producto buscado'].lower() == nombre_producto.lower()
+            for f in filas if normalizar(f['Producto buscado']) == nombre_normalizado
         ]
         if datos:
             st.subheader("Resumen por unidad:")
