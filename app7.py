@@ -88,7 +88,7 @@ df_trans = df_trans[df_trans['date'] <= pd.Timestamp(datetime.now().date())]
 df_item = leer_tabla("ITEMTABLE")
 df_pic = leer_tabla("PICTURETABLE")
 
-# --- Normalización de texto (ignorar acentos y mayúsculas) ---
+# --- Normalización de texto ---
 def normalizar(texto):
     if not isinstance(texto, str):
         return ""
@@ -97,30 +97,39 @@ def normalizar(texto):
 
 # --- Búsqueda flexible ---
 nombre_producto = st.text_input("Producto a buscar:")
+solo_con_boleta = st.radio("¿Mostrar sólo registros con boleta?", options=["Sí", "No"], index=0)
 if nombre_producto:
     if "descartados" not in st.session_state:
         st.session_state.descartados = set()
 
-    trans_ids_con_boleta = set(df_pic['transactionID'].unique())
-    df_trans_boleta = df_trans[df_trans['transactionsTableID'].isin(trans_ids_con_boleta)].copy()
-
-    # Coincidencia exacta normalizada
-    df_trans_boleta['notes_norm'] = df_trans_boleta['notes'].apply(normalizar)
     nombre_normalizado = normalizar(nombre_producto)
-    exactos = df_trans_boleta[df_trans_boleta['notes_norm'].str.contains(nombre_normalizado, na=False)]
+    df_trans['notes_norm'] = df_trans['notes'].apply(normalizar)
+
+    if solo_con_boleta == "Sí":
+        trans_ids_con_boleta = set(df_pic['transactionID'].unique())
+        df_filtrado = df_trans[df_trans['transactionsTableID'].isin(trans_ids_con_boleta)].copy()
+    else:
+        df_filtrado = df_trans.copy()
+
+    exactos = df_filtrado[df_filtrado['notes_norm'].str.contains(nombre_normalizado, na=False)]
     exactos = exactos.sort_values("date", ascending=False)
 
     n_resultados = st.number_input("¿Cuántas compras quieres ver?", min_value=3, max_value=20, value=3)
-    top = exactos.head(n_resultados)
+    top = exactos.copy()
     ids_ya = set(top['transactionsTableID']) | st.session_state.descartados
 
-    if len(top) < n_resultados:
-        resto = df_trans_boleta[~df_trans_boleta['transactionsTableID'].isin(ids_ya)].copy()
-        resto['score'] = resto['notes_norm'].apply(lambda x: fuzz.partial_ratio(nombre_normalizado, x))
-        resto = resto[resto['score'] > 70].sort_values("score", ascending=False)
-        top = pd.concat([top, resto.head(n_resultados - len(top))])
+    resto = df_filtrado[~df_filtrado['transactionsTableID'].isin(ids_ya)].copy()
+    resto['score'] = resto['notes_norm'].apply(lambda x: fuzz.partial_ratio(nombre_normalizado, x))
+    resto = resto[resto['score'] > 70].sort_values("score", ascending=False)
 
-    top = top.sort_values("date", ascending=False)
+    top = top[~top['transactionsTableID'].isin(st.session_state.descartados)]
+    if len(top) < n_resultados:
+        top = pd.concat([top, resto.head(n_resultados - len(top))])
+    top = top.drop_duplicates('transactionsTableID').sort_values("date", ascending=False).head(n_resultados)
+
+    if top.empty:
+        st.warning("No se encontraron registros suficientes con los criterios seleccionados.")
+
     trans_ids_mostradas = set()
 
     def descargar_y_mostrar_imagen(file_name):
