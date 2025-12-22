@@ -16,7 +16,7 @@ from datetime import datetime
 from googleapiclient.http import MediaIoBaseDownload
 import unicodedata
 
-st.title("App Compras Familiares v3")
+st.title("App Compras Familiares v4")
 PASSWORD = st.secrets["CLAVE_FAMILIAR"]
 password_input = st.text_input("Ingresa la clave familiar", type="password")
 if password_input != PASSWORD:
