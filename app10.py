@@ -1,4 +1,4 @@
-# Versión 3 de la App Compras Familiares (app7.py)
+# Versión 4 de la App Compras Familiares (app10.py)
 # Mejora: reposición automática al descartar, muestra Nota antes de boleta, PDF con iframe+descarga+aviso
 
 import streamlit as st
