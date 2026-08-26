@@ -1,0 +1,19 @@
+# Credenciales y secretos
+service_account.json
+client_secrets.json
+*.pem
+*.key
+.env
+
+# Datos personales / Bluecoins
+*.fydb
+boletas/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Streamlit
+.streamlit/secrets.toml
